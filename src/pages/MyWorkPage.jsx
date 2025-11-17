@@ -12,6 +12,7 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
+
 import { deleteObject, ref } from "firebase/storage";
 
 import {
@@ -26,7 +27,7 @@ import {
 
 export default function MyWorkPage() {
   const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // only controls session loading
   const [user, setUser] = useState(null);
 
   const navigate = useNavigate();
@@ -35,14 +36,18 @@ export default function MyWorkPage() {
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
       setUser(u);
+
+      // If user logs out → kick back to login
+      if (!u) navigate("/login");
     });
     return () => unsub();
-  }, []);
+  }, [navigate]);
 
   /* -------------------- Load Sessions -------------------- */
   useEffect(() => {
     const loadSessions = async () => {
-      if (!user) return;
+      if (user === null) return; // still waiting for Firebase
+      if (!user) return; // user is logged out — already redirected
 
       const q = query(
         collection(db, "sessions"),
@@ -50,8 +55,8 @@ export default function MyWorkPage() {
       );
 
       const snap = await getDocs(q);
-
       const results = [];
+
       snap.forEach((doc) => {
         results.push({
           id: doc.id,
@@ -59,7 +64,7 @@ export default function MyWorkPage() {
         });
       });
 
-      // Sort by newest first
+      // Sort newest first
       results.sort((a, b) => b.createdAt - a.createdAt);
 
       setSessions(results);
@@ -77,12 +82,11 @@ export default function MyWorkPage() {
       // Delete Firestore doc
       await deleteDoc(doc(db, "sessions", session.id));
 
-      // Delete image from Storage
+      // Delete image file from storage
       if (session.imageURL) {
         const path = decodeURIComponent(
           session.imageURL.split("/o/")[1].split("?")[0]
         );
-
         const imgRef = ref(storage, path);
         await deleteObject(imgRef);
       }
@@ -95,8 +99,8 @@ export default function MyWorkPage() {
     }
   };
 
-  /* -------------------- UI -------------------- */
-  if (loading || user === null) {
+  /* -------------------- Loading UI -------------------- */
+  if (loading) {
     return (
       <Box sx={{ p: 4, textAlign: "center" }}>
         <CircularProgress />
@@ -104,6 +108,7 @@ export default function MyWorkPage() {
     );
   }
 
+  /* -------------------- Main UI -------------------- */
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" sx={{ mb: 2 }}>
@@ -121,7 +126,6 @@ export default function MyWorkPage() {
       >
         Logout
       </Button>
-
 
       {sessions.length === 0 && (
         <Typography>No saved sessions yet.</Typography>
